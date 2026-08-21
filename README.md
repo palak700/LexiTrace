@@ -157,3 +157,107 @@ npm run build
 - Add SHAP and Integrated Gradients for model-backed explanations.
 - Add authentication and project history.
 - Add dataset import tooling and experiment tracking.
+  ## Installation & Setup
+
+### Prerequisites
+
+Install the following before running LexiTrace:
+
+- Python **3.11** or **3.12**
+- Node.js **18+**
+- npm (comes with Node.js)
+- Git
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/palak700/LexiTrace.git
+cd LexiTrace
+```
+
+---
+
+### 2. Backend Setup
+
+Navigate to the backend folder.
+
+```bash
+cd backend
+```
+
+Create and activate a virtual environment.
+
+**Windows (PowerShell)**
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+**Windows (Command Prompt)**
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+**Linux/macOS**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Install Python dependencies.
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+### 3. Frontend Setup
+
+Open a new terminal and move to the frontend folder.
+
+```bash
+cd frontend
+npm install
+```
+
+---
+
+## Running the Project
+
+### Start Backend
+
+```powershell
+cd backend
+$env:LEXITRACE_MODE="development"
+uvicorn app.main:app --reload --port 8000
+```
+
+Backend runs on:
+
+```text
+http://127.0.0.1:8000
+```
+
+---
+
+### Start Frontend
+
+Open another terminal.
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend runs on:
+
+```text
+http://localhost:5173
+```
+
+Open the frontend URL in your browser and start analyzing text.
