@@ -25,7 +25,7 @@ The prototype combines:
 | 0 | Human |
 | 1 | AI-generated |
 | 2 | AI-polished human |
-| 3 | Humanized AI |
+
 
 ## Architecture
 
