@@ -17,8 +17,8 @@ from ml.preprocessing.dataset import load_text_classification_dataset, tokenize_
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fine-tune DeBERTa-v3-base for LexiTrace.")
-    parser.add_argument("--data", required=True, help="CSV path with text,label columns.")
-    parser.add_argument("--output-dir", default="ml/models/deberta-v3-base-finetuned")
+    parser.add_argument("--data", required=True, help="Prepared directory with train.csv, validation.csv, test.csv.")
+    parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model-name", default="microsoft/deberta-v3-base")
     parser.add_argument("--epochs", type=float, default=3)
     parser.add_argument("--batch-size", type=int, default=8)
@@ -29,9 +29,9 @@ def main() -> None:
 
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name,
-        num_labels=4,
-        id2label={0: "Human", 1: "AI-generated", 2: "AI-polished human", 3: "Humanized AI"},
-        label2id={"Human": 0, "AI-generated": 1, "AI-polished human": 2, "Humanized AI": 3},
+        num_labels=3,
+        id2label={0: "Human-Written", 1: "AI-Generated", 2: "AI-Transformed"},
+        label2id={"Human-Written": 0, "AI-Generated": 1, "AI-Transformed": 2},
     )
 
     def metrics(eval_pred):

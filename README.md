@@ -1,263 +1,83 @@
-# LexiTrace
+# LexiTrace — Detect → Localize Evidence → Explain
 
-Explainable fine-grained AI text detection and authorship analysis platform.
+React/TypeScript/Vite/Tailwind frontend; FastAPI backend; independent three-class DeBERTa-v3 document and sentence classifiers; Captum Layer Integrated Gradients; PostgreSQL logging. No Docker required.
 
-LexiTrace is a working college-project MVP for classifying text into four authorship categories while showing linguistic signals, class probabilities, highlighted evidence, and a clear disclaimer that AI detection is probabilistic.
-
-## Problem Statement
-
-AI text detectors often return a single opaque score. LexiTrace aims to make detection more useful and responsible by combining a four-class taxonomy with explainable evidence and linguistic feature analysis.
-
-## Proposed Solution
-
-The prototype combines:
-
-- A React + TypeScript dashboard for text analysis.
-- A FastAPI backend exposing health and analysis endpoints.
-- An ML inference abstraction that supports development fallback mode now and fine-tuned transformer models later.
-- NLP feature extraction for readability, vocabulary diversity, burstiness, punctuation, passive voice, POS distribution, and estimated perplexity.
-- Explainability output for important sentences and tokens.
-
-## Four-Class Taxonomy
-
-| Label | Class |
-| --- | --- |
-| 0 | Human |
-| 1 | AI-generated |
-| 2 | AI-polished human |
-
-
-## Architecture
-
-```mermaid
-flowchart LR
-  A["React dashboard"] --> B["POST /api/analyze"]
-  B --> C["FastAPI service"]
-  C --> D["ML predictor"]
-  C --> E["NLP features"]
-  C --> F["Explainability"]
-  D --> G["AI contribution estimator"]
-  E --> H["JSON response"]
-  F --> H
-  G --> H
-  H --> A
-```
-
-## Technology Stack
-
-- Frontend: React, TypeScript, Vite, Tailwind CSS, Recharts
-- Backend: Python, FastAPI, Pydantic, pytest
-- ML: Hugging Face Transformers, PyTorch, scikit-learn
-- NLP: lightweight development implementation with optional spaCy/textstat expansion
-
-## Installation
-
-Backend:
-
-```powershell
-cd C:\Users\aryan\LexiTrace\backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-Frontend:
-
-```powershell
-cd C:\Users\aryan\LexiTrace\frontend
-npm install
-```
-
-## Running Backend
-
-```powershell
-cd C:\Users\aryan\LexiTrace\backend
-$env:LEXITRACE_MODE="development"
-uvicorn app.main:app --reload --port 8000
-```
-
-## Running Frontend
-
-```powershell
-cd C:\Users\aryan\LexiTrace\frontend
-npm run dev
-```
-
-Open the Vite URL, usually `http://localhost:5173`.
-
-## ML Setup
-
-Development mode is the default and does not claim a trained model exists. Set `LEXITRACE_MODE=model` when a fine-tuned model directory is available.
-
-Use Python 3.11 or 3.12 for ML training dependencies because some ML libraries may not publish wheels for the newest Python releases immediately.
-
-```powershell
-cd C:\Users\aryan\LexiTrace
-python -m venv .mlvenv
-.\.mlvenv\Scripts\Activate.ps1
-pip install -r ml/requirements.txt
-```
-
-Expected model path:
-
-```text
-ml/models/deberta-v3-base-finetuned/
-```
-
-Train later with:
-
-```powershell
-cd C:\Users\aryan\LexiTrace
-python ml/training/train.py --data ml/data/dataset.csv --output-dir ml/models/deberta-v3-base-finetuned
-```
-
-## Dataset Setup
-
-Expected CSV format:
-
-```csv
-text,label
-"Human written example...",0
-"AI generated example...",1
-"Human text improved by AI...",2
-"AI text rewritten to appear human...",3
-```
-
-Datasets such as APT-Eval, RAID, and Beemo can be integrated later by converting them into the same `text,label` format. Do not commit large datasets.
-
-## API Documentation
-
-See [docs/api.md](docs/api.md).
-
-## Testing
-
-Backend:
-
-```powershell
-cd C:\Users\aryan\LexiTrace\backend
-pytest
-```
-
-Frontend:
-
-```powershell
-cd C:\Users\aryan\LexiTrace\frontend
-npm run build
-```
-
-## Limitations
-
-- Development mode uses transparent heuristics, not a validated detector.
-- The AI contribution score is an MVP approximation, not scientific proof.
-- SHAP and Captum are scaffolded for future model-backed explainability; fallback explanations are labeled as development explanations.
-
-## Future Work
-
-- Fine-tune DeBERTa-v3-base and RoBERTa-base on a balanced four-class dataset.
-- Add SHAP and Integrated Gradients for model-backed explanations.
-- Add authentication and project history.
-- Add dataset import tooling and experiment tracking.
-  ## Installation & Setup
-
-### Prerequisites
-
-Install the following before running LexiTrace:
-
-- Python **3.11** or **3.12**
-- Node.js **18+**
-- npm (comes with Node.js)
-- Git
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/palak700/LexiTrace.git
-cd LexiTrace
-```
-
----
-
-### 2. Backend Setup
-
-Navigate to the backend folder.
-
-```bash
-cd backend
-```
-
-Create and activate a virtual environment.
-
-**Windows (PowerShell)**
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-**Windows (Command Prompt)**
-
-```cmd
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-**Linux/macOS**
-
+## Quick start (Linux/macOS, Python 3.11 or 3.12, Node 20+)
+From the extracted LexiTrace directory:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-Install Python dependencies.
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-### 3. Frontend Setup
-
-Open a new terminal and move to the frontend folder.
-
-```bash
+python -m pip install -r backend/requirements.txt
 cd frontend
-npm install
+npm ci
+npm run build
+cd ../backend
+LEXITRACE_MODE=demo ../.venv/bin/python -m uvicorn app.main:app --reload --port 8000
 ```
-
----
-
-## Running the Project
-
-### Start Backend
-
-```powershell
-cd backend
-$env:LEXITRACE_MODE="development"
-uvicorn app.main:app --reload --port 8000
-```
-
-Backend runs on:
-
-```text
-http://127.0.0.1:8000
-```
-
----
-
-### Start Frontend
-
-Open another terminal.
-
+In a second terminal:
 ```bash
-cd frontend
+cd LexiTrace/frontend
 npm run dev
 ```
+Open the frontend on port 5173. Vite forwards /api to port 8000. Do not set VITE_API_BASE_URL unless using a separate API host.
 
-Frontend runs on:
-
-```text
-http://localhost:5173
+## Windows PowerShell
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+cd frontend
+npm ci
+npm run build
+cd ../backend
+$env:LEXITRACE_MODE="demo"
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
+Second terminal: `cd LexiTrace/frontend`, then `npm run dev`.
 
-Open the frontend URL in your browser and start analyzing text.
+## PostgreSQL (native installation, no container)
+Install PostgreSQL 16+ using your operating system's installer and start its service. In psql as an administrator:
+```sql
+CREATE USER lexitrace WITH PASSWORD 'choose-your-own-password';
+CREATE DATABASE lexitrace OWNER lexitrace;
+```
+Before starting the backend, export your connection string:
+```bash
+export DATABASE_URL='postgresql+psycopg://lexitrace:YOUR_URL_ENCODED_PASSWORD@localhost:5432/lexitrace'
+```
+PowerShell: `$env:DATABASE_URL="postgresql+psycopg://lexitrace:YOUR_URL_ENCODED_PASSWORD@localhost:5432/lexitrace"`.
+The table is created on first analysis. Only a text hash, length, class scores, model mode, timestamp and compact sentence evidence are stored; full input text and large attribution arrays are not stored. If unset, logging is visibly disabled. Database failures are reported as unavailable in the response/UI. Do not commit credentials.
+
+## Real models: data preparation, training and evaluation
+Only OpAI and LLMTrace are supported sources. Neither data nor trained weights are bundled. Supply CSV exports with `text,label` columns. Labels must be 0/1/2 or Human-Written/AI-Generated/AI-Transformed. Map source-specific labels explicitly before import; the project does not invent source schemas or annotations.
+
+Install ML dependencies from the repository root:
+```bash
+source .venv/bin/activate
+python -m pip install -r ml/requirements.txt
+python -m ml.preprocessing.prepare --opai /path/opai_documents.csv --llmtrace /path/llmtrace_documents.csv --component document --output ml/data/processed/document
+python -m ml.preprocessing.prepare --opai /path/opai_sentences.csv --llmtrace /path/llmtrace_sentences.csv --component sentence --output ml/data/processed/sentence
+python -m ml.training.train --data ml/data/processed/document --output-dir ml/models/document
+python -m ml.training.train --data ml/data/processed/sentence --output-dir ml/models/sentence
+python -m ml.evaluation.evaluate --data ml/data/processed/document --model-dir ml/models/document
+python -m ml.evaluation.evaluate --data ml/data/processed/sentence --model-dir ml/models/sentence
+```
+Sentence rows need actual sentence annotations: a mixed document's label must not be copied to all its sentences. Each class needs at least 10 unique rows. Exact normalized duplicates are removed, conflicting labels are excluded, and stratified 80/10/10 splits are saved. For sentence exports, keep related source documents in one split before import; the current CSV adapter lacks document IDs and cannot prevent related-sentence leakage. Avoid training/evaluating related documents across the two components if reporting combined performance.
+
+Training downloads microsoft/deberta-v3-base from Hugging Face. A GPU is recommended; CPU training is slow. Two checkpoints are loaded once per backend process, on CPU by default. Long documents use overlapping chunks; class probabilities are averaged over chunks. Sentence attribution is computed for the three strongest evidence sentences, up to 512 tokens per sentence, with 32 integration steps. Inspect convergence delta before relying on explanations. DeBERTa-v3 uses the Transformers `deberta-v2` architecture implementation.
+
+Start the real model backend from backend:
+```bash
+LEXITRACE_MODE=model ../.venv/bin/python -m uvicorn app.main:app --port 8000
+```
+Override paths with LEXITRACE_DOCUMENT_MODEL and LEXITRACE_SENTENCE_MODEL. Missing checkpoints return 503 rather than pretending demo scores are model results.
+
+## API and verification
+GET /api/health and /health; POST /api/analyze and /analyze with `{"text":"Your document."}`. Returns three-class prediction, confidence, probabilities, sentence evidence, selected token scores, linguistic estimates, mode and logging status. Health is liveness, not proof models/database are ready. There is no /evaluate endpoint: evaluation remains a CLI as in the original project.
+```bash
+cd backend
+../.venv/bin/python -m pytest -q
+curl -X POST http://127.0.0.1:8000/api/analyze -H 'Content-Type: application/json' -d '{"text":"This is an example. Another sentence follows."}'
+```
+Demo mode runs immediately without ML weights or PostgreSQL. It is an untrained demonstration, not validated AI detection, and returns no fabricated Integrated Gradients scores. Linguistic measures are approximate heuristics. Real model accuracy requires evaluation on held-out OpAI/LLMTrace annotations.
+
+See docs/AUDIT.md for the original repository audit and docs/VALIDATION.md for delivery checks and limitations.

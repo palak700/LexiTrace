@@ -1,0 +1,14 @@
+# Delivery validation
+
+Passed on Python 3.12 / Node 24:
+- Backend pytest: 4 tests (health aliases, validation, three-class sentence pipeline, missing checkpoints return 503).
+- Frontend TypeScript and production Vite build.
+- Live frontend page and text analysis through Vite proxy to the deliverable backend.
+- Synthetic CSV fixture: 48/6/6 document split with no exact duplicate overlap. Fixtures were not used to train a detector.
+- Backend dependency consistency check.
+
+Not executed: full ML dependency installation, DeBERTa training/inference, Captum attribution on a real checkpoint, model evaluation on OpAI/LLMTrace, PostgreSQL inserts. No real datasets, trained weights or database were available. These capabilities require integration validation; no accuracy claim is made.
+
+Sentence dataset exports require sentence annotations. Related sentence/source-document grouping is the user's responsibility with the current normalized CSV adapter.
+
+The uploaded ZIP could not be extracted because it exceeded the file-transfer limit. This delivery is based on the GitHub checkout and your complete project-idea document.

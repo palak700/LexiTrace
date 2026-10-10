@@ -19,3 +19,9 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+
+# Preserve /api endpoints and provide the requested root aliases.
+app.include_router(router)
+
+# Preserve /api endpoints and provide the requested root aliases.
+app.include_router(router)

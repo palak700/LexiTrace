@@ -1,5 +1,8 @@
-numpy==2.2.6
+-r ../backend/requirements.txt
 scikit-learn==1.7.1
 transformers==4.55.0
 torch==2.8.0
 datasets==4.0.0
+captum==0.8.0
+sentencepiece==0.2.0
+accelerate==1.10.0

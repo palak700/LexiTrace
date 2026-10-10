@@ -18,7 +18,7 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
     model = AutoModelForSequenceClassification.from_pretrained(args.model_dir)
     dataset = tokenize_dataset(load_text_classification_dataset(args.data), tokenizer)
-    trainer = Trainer(model=model, tokenizer=tokenizer)
+    trainer = Trainer(model=model, tokenizer=tokenizer, data_collator=__import__("transformers").DataCollatorWithPadding(tokenizer))
     predictions = trainer.predict(dataset["test"])
     predicted_labels = np.argmax(predictions.predictions, axis=-1)
     labels = predictions.label_ids

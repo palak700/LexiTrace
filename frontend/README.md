@@ -1,8 +1,3 @@
-# LexiTrace Frontend
+# LexiTrace
 
-React + TypeScript + Vite dashboard.
-
-```powershell
-npm install
-npm run dev
-```
+See the root README.md for the current three-class architecture, setup, API, model training and PostgreSQL instructions.
