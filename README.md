@@ -34,6 +34,24 @@ $env:LEXITRACE_MODE="demo"
 ```
 Second terminal: `cd LexiTrace/frontend`, then `npm run dev`.
 
+## Login and registration
+The app opens on the sign-in page. It includes account registration, session restoration and logout. Passwords are salted and hashed with scrypt. Session tokens use HttpOnly cookies and only their SHA-256 hashes are stored in PostgreSQL. Sessions expire after 24 hours and logout revokes them.
+
+Accounts require PostgreSQL and DATABASE_URL. Without a database, demo mode offers **Try guest demo**; it does not pretend to create accounts. With DATABASE_URL configured, both demo and model analysis require sign-in. Model mode never permits guest analysis.
+
+On Windows, install PostgreSQL using its native installer, create the user/database shown below in SQL Shell (psql), then start the backend in PowerShell:
+```powershell
+cd "C:\Users\aryan\Downloads\LexiTrace-No-Docker\LexiTrace\backend"
+$env:DATABASE_URL="postgresql+psycopg://lexitrace:YOUR_URL_ENCODED_PASSWORD@localhost:5432/lexitrace"
+$env:LEXITRACE_MODE="demo"
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+Start the frontend in a second terminal as described above. Choose **Create account**, register with an email and a password of at least 10 characters, and sign in. No default account or hard-coded password is provided.
+
+For HTTPS deployment set LEXITRACE_COOKIE_SECURE=true. Configure FRONTEND_ORIGIN for your frontend's origin. Keep the frontend and API on the same site (the Vite proxy does this locally).
+
+Authentication endpoints: GET /api/auth/status, POST /api/auth/register, POST /api/auth/login, GET /api/auth/me, POST /api/auth/logout. Registration returns 201, duplicate emails 409, invalid credentials/sessions 401, and unavailable PostgreSQL 503. Existing /api/analyze and /analyze aliases share the same access requirements.
+
 ## PostgreSQL (native installation, no container)
 Install PostgreSQL 16+ using your operating system's installer and start its service. In psql as an administrator:
 ```sql

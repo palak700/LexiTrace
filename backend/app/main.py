@@ -25,3 +25,6 @@ app.include_router(router)
 
 # Preserve /api endpoints and provide the requested root aliases.
 app.include_router(router)
+
+from app.api.auth import router as auth_router
+app.include_router(auth_router, prefix="/api")

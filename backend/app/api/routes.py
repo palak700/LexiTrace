@@ -1,13 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from app.services.pipeline import analyze, ModelUnavailable
+from app.api.auth import require_analysis_access
 router = APIRouter()
 class AnalysisRequest(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
 @router.get('/health')
 def health(): return {'status':'ok'}
 @router.post('/analyze')
-def analyze_route(payload: AnalysisRequest):
+def analyze_route(payload: AnalysisRequest, user=Depends(require_analysis_access)):
     if not payload.text.strip(): raise HTTPException(422, 'Text must not be empty.')
     try: return analyze(payload.text)
     except ModelUnavailable as e: raise HTTPException(503, str(e)) from e
