@@ -1,102 +1,103 @@
+"""Local accounts with hashed passwords and revocable cookie sessions."""
+import hashlib
+import hmac
 import os
-import re
 import secrets
-from functools import lru_cache
+import sqlite3
+import time
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.exc import SQLAlchemyError
-from app.services.auth_service import (
-    AuthRepository, AuthUnavailable, EmailExists, SESSION_SECONDS,
-    hash_password, verify_password, token_hash,
-)
+from pydantic import BaseModel, Field
 
-router = APIRouter(prefix='/auth', tags=['accounts'])
+router = APIRouter(prefix='/auth')
 COOKIE = 'lexitrace_session'
 
-class LoginRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=128)
+def database():
+    db = sqlite3.connect(os.getenv('LEXITRACE_AUTH_DB', str(Path(__file__).resolve().parents[2] / 'accounts.sqlite3')))
+    db.row_factory = sqlite3.Row
+    db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires REAL NOT NULL)')
+    return db
 
-    @field_validator('email')
-    @classmethod
-    def normalize_email(cls, value):
-        email = value.strip().lower()
-        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
-            raise ValueError('Enter a valid email address.')
-        return email
+def password_hash(password, salt=None):
+    salt = salt or secrets.token_hex(16)
+    return salt + ':' + hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 600000).hex()
 
-class RegistrationRequest(LoginRequest):
-    name: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=10, max_length=128)
+def public_user(row):
+    return {key: row[key] for key in ('id', 'name', 'email', 'role')}
 
-    @field_validator('name')
-    @classmethod
-    def normalize_name(cls, value):
-        name = value.strip()
-        if not name: raise ValueError('Name must not be blank.')
-        return name
-
-@lru_cache(maxsize=1)
-def repository():
-    try: return AuthRepository()
-    except AuthUnavailable as exc: raise HTTPException(503, str(exc)) from exc
-
-@lru_cache(maxsize=1)
-def dummy_hash():
-    return hash_password(secrets.token_urlsafe(32))
-
-def require_user(request: Request, repo=Depends(repository)):
-    token = request.cookies.get(COOKIE)
-    try: user = repo.session_user(token_hash(token)) if token else None
-    except SQLAlchemyError as exc: raise HTTPException(503, 'Account database is unavailable.') from exc
-    if not user: raise HTTPException(401, 'Please sign in. Your session may have expired.')
-    return user
-
-def require_analysis_access(request: Request):
-    # Guest access is limited to the untrained demo with no configured database.
-    if os.getenv('LEXITRACE_MODE', 'demo') == 'demo' and not os.getenv('DATABASE_URL'):
-        return None
-    return require_user(request, repository())
-
-def start_session(response, repo, user):
-    token = secrets.token_urlsafe(32)
-    repo.create_session(user['id'], token_hash(token))
-    response.set_cookie(COOKIE, token, max_age=SESSION_SECONDS, httponly=True,
-                        secure=os.getenv('LEXITRACE_COOKIE_SECURE', 'false').lower() == 'true',
-                        samesite='lax', path='/')
-    return {'user':{key:user[key] for key in ('id','name','email')}}
-
-@router.get('/status')
-def status():
-    return {'accounts_configured':bool(os.getenv('DATABASE_URL')),
-            'guest_allowed':os.getenv('LEXITRACE_MODE','demo')=='demo' and not os.getenv('DATABASE_URL')}
-
-@router.post('/register', status_code=201)
-def register(payload: RegistrationRequest, response: Response, repo=Depends(repository)):
+def current_user(request: Request):
+    token = request.cookies.get(COOKIE, '')
+    db = database()
     try:
-        user = repo.create_user(payload.name, payload.email, hash_password(payload.password))
-        return start_session(response, repo, user)
-    except EmailExists as exc: raise HTTPException(409, str(exc)) from exc
-    except SQLAlchemyError as exc: raise HTTPException(503, 'Account database is unavailable.') from exc
+        row = db.execute('SELECT users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token=? AND sessions.expires>?', (hashlib.sha256(token.encode()).hexdigest(), time.time())).fetchone()
+    finally:
+        db.close()
+    if not row:
+        raise HTTPException(401, 'Please sign in to continue.')
+    return public_user(row)
+
+def start_session(db, response, user_id):
+    token = secrets.token_urlsafe(32)
+    db.execute('DELETE FROM sessions WHERE expires<=?', (time.time(),))
+    db.execute('INSERT INTO sessions VALUES (?, ?, ?)', (hashlib.sha256(token.encode()).hexdigest(), user_id, time.time() + 86400))
+    db.commit()
+    response.set_cookie(COOKIE, token, httponly=True, samesite='strict', secure=os.getenv('LEXITRACE_COOKIE_SECURE') == 'true', max_age=86400, path='/')
+
+class Credentials(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+    role: str = Field(pattern='^(user|admin)$')
+
+class Registration(Credentials):
+    name: str = Field(min_length=1, max_length=100)
+    admin_code: str = Field(default='', max_length=256)
+
+@router.post('/signup', status_code=201)
+def signup(payload: Registration, response: Response):
+    email = payload.email.strip().lower()
+    if not payload.name.strip() or '@' not in email or not email.rsplit('@', 1)[1]:
+        raise HTTPException(422, 'Enter a name and a valid email address.')
+    if payload.role == 'admin':
+        code = os.getenv('LEXITRACE_ADMIN_SIGNUP_CODE', '')
+        if not code or not hmac.compare_digest(code.encode(), payload.admin_code.encode()):
+            raise HTTPException(403, 'Admin signup requires a valid administrator setup code.')
+    db = database()
+    try:
+        try:
+            cursor = db.execute('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)', (payload.name.strip(), email, password_hash(payload.password), payload.role))
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, 'An account with this email already exists.') from exc
+        start_session(db, response, cursor.lastrowid)
+        return public_user(db.execute('SELECT * FROM users WHERE id=?', (cursor.lastrowid,)).fetchone())
+    finally:
+        db.close()
 
 @router.post('/login')
-def login(payload: LoginRequest, response: Response, repo=Depends(repository)):
+def login(payload: Credentials, response: Response):
+    db = database()
     try:
-        user = repo.find_user(payload.email)
-        valid = verify_password(payload.password, user['password_hash'] if user else dummy_hash())
-        if not user or not valid: raise HTTPException(401, 'Incorrect email or password.')
-        return start_session(response, repo, user)
-    except SQLAlchemyError as exc: raise HTTPException(503, 'Account database is unavailable.') from exc
+        row = db.execute('SELECT * FROM users WHERE email=?', (payload.email.strip().lower(),)).fetchone()
+        stored = row['password'] if row else password_hash('dummy-password')
+        valid = hmac.compare_digest(stored, password_hash(payload.password, stored.split(':')[0]))
+        if not row or not valid or row['role'] != payload.role:
+            raise HTTPException(401, 'Email, password, or account type is incorrect.')
+        start_session(db, response, row['id'])
+        return public_user(row)
+    finally:
+        db.close()
 
 @router.get('/me')
-def me(user=Depends(require_user)):
-    return {'user':user}
+def me(user=Depends(current_user)):
+    return user
 
 @router.post('/logout')
-def logout(request: Request, response: Response, repo=Depends(repository)):
-    token = request.cookies.get(COOKIE)
+def logout(request: Request, response: Response):
+    db = database()
     try:
-        if token: repo.delete_session(token_hash(token))
-    except SQLAlchemyError as exc: raise HTTPException(503, 'Account database is unavailable.') from exc
+        db.execute('DELETE FROM sessions WHERE token=?', (hashlib.sha256(request.cookies.get(COOKIE, '').encode()).hexdigest(),))
+        db.commit()
+    finally:
+        db.close()
     response.delete_cookie(COOKIE, path='/')
-    return {'status':'signed out'}
+    return {'status': 'ok'}

@@ -10,3 +10,6 @@ psycopg[binary]==3.2.9
 numpy==1.26.4
 sqlalchemy==2.0.43
 psycopg[binary]==3.2.9
+
+pypdf==6.21.1
+python-multipart==0.0.20
