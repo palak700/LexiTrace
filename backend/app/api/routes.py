@@ -30,8 +30,9 @@ def analyze_route(payload: AnalysisRequest, user=Depends(current_user)):
         return analyze(payload.text)
     except ModelUnavailable as e:
         raise HTTPException(503, str(e)) from e
-    except Exception as e:
-        raise HTTPException(500, 'Analysis failed. Check backend configuration and logs.') from e
+    except Exception:
+        logger.exception('Analysis failed')
+        raise HTTPException(500, 'Analysis failed. Check backend configuration and logs.')
 
 
 DISPLAY_LABELS = {
