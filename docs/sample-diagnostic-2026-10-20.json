@@ -1,0 +1,90 @@
+{
+  "sample_description": "User-provided seminar text, final expected-label instruction excluded; whitespace-only line layout simplified before production normalization; UTF-8 verified. No source text stored.",
+  "input": {
+    "word_count": 2013,
+    "character_count": 13470,
+    "normalized_character_count": 13466,
+    "normalization_changed_text": true,
+    "original_token_count": 2860,
+    "normalized_token_count": 2860
+  },
+  "checkpoint": {
+    "directory_name": "document",
+    "sha256": {
+      "config.json": "2cf7710f0581cffb2ae2effbd206d17371c0822d0577b0fed6a959c92a0f0155",
+      "model.safetensors": "96ade988d4240cbd0d98264d6b80df04aa61e641e5d53ddd96ce41957b890c01",
+      "tokenizer.json": "40b244adff13af033491ed93e56c53ecfc9c652cde898ac62c09eebcad940f34",
+      "tokenizer_config.json": "0dbe41323167ba5f2e1e876ccd05068318dd2378b922bdfd924a389dba3bcc7a"
+    },
+    "saved_id2label": {
+      "0": "Human",
+      "1": "AI-Generated",
+      "2": "AI-Edited Human"
+    },
+    "output_labels": [
+      "Human",
+      "AI-Generated",
+      "AI-Edited Human"
+    ],
+    "num_labels": 3,
+    "evaluation_mode": true,
+    "tokenizer_class": "DebertaV2TokenizerFast",
+    "saved_transformers_version": "5.18.0"
+  },
+  "production": {
+    "label": "Human",
+    "confidence": 0.5469958186149597,
+    "confidences": {
+      "Human": 0.5469958186149597,
+      "AI-Generated": 0.0013344105100259185,
+      "AI-Edited Human": 0.45166972279548645
+    },
+    "strategy": "All-document overlapping windows",
+    "max_length": 512,
+    "stride": 64,
+    "window_count": 7,
+    "total_tokens_with_overlap": 3256,
+    "max_window_tokens": 512,
+    "document_truncated": false
+  },
+  "first_256": {
+    "label": "AI-Edited Human",
+    "confidence": 0.7272765636444092,
+    "confidences": {
+      "Human": 0.27077019214630127,
+      "AI-Generated": 0.0019532034639269114,
+      "AI-Edited Human": 0.7272765636444092
+    },
+    "max_length": 256,
+    "tokens_processed": 256,
+    "truncated": true,
+    "logits": {
+      "Human": 1.0895591974258423,
+      "AI-Generated": -3.842240333557129,
+      "AI-Edited Human": 2.0775954723358154
+    }
+  },
+  "first_512": {
+    "label": "AI-Edited Human",
+    "confidence": 0.6105141043663025,
+    "confidences": {
+      "Human": 0.3875434100627899,
+      "AI-Generated": 0.0019425156060606241,
+      "AI-Edited Human": 0.6105141043663025
+    },
+    "max_length": 512,
+    "tokens_processed": 512,
+    "truncated": true,
+    "logits": {
+      "Human": 1.3795685768127441,
+      "AI-Generated": -3.9162757396698,
+      "AI-Edited Human": 1.8340420722961426
+    }
+  },
+  "comparisons": {
+    "production_vs_256_label_changed": true,
+    "production_vs_256_max_score_difference": 0.27622562646865845,
+    "normalization_256_label_changed": false,
+    "normalization_256_max_score_difference": 0.0
+  }
+}

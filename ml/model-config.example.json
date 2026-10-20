@@ -1,0 +1,1 @@
+{"architectures":["DebertaV2ForSequenceClassification"],"model_type":"deberta-v2","num_labels":3,"id2label":{"0":"Human","1":"AI-Generated","2":"AI-Edited Human"},"label2id":{"Human":0,"AI-Generated":1,"AI-Edited Human":2}}
