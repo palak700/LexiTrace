@@ -18,7 +18,7 @@ export function AuthPage({onAuthenticated}:{onAuthenticated:(user:User)=>void}) 
     <section className="auth-story">
       <a className="brand" href="/" aria-label="LexiTrace home"><span className="brand-mark"><FileText size={23}/></span>LexiTrace</a>
       <div><p className="eyebrow">A clearer view of your writing</p><h1>Every document<br/>has a story.</h1><p className="story-copy">Explore AI authorship signals with a document-level assessment and a clear breakdown of the results.</p>
-      <div className="story-note"><ShieldCheck size={24}/><span>Three-class analysis<br/><small>Human-written, AI-generated, AI-transformed</small></span></div></div>
+      <div className="story-note"><ShieldCheck size={24}/><span>Document authorship analysis<br/><small>Human, AI-Generated, AI-Edited Human</small></span></div></div>
       <p className="story-footer">Thoughtful analysis. Informed decisions.</p>
     </section>
     <section className="auth-form-side"><div className="auth-card">

@@ -101,3 +101,17 @@ def logout(request: Request, response: Response):
         db.close()
     response.delete_cookie(COOKIE, path='/')
     return {'status': 'ok'}
+
+
+
+def analysis_access(request: Request):
+    from app.core.config import settings
+    if os.getenv('LEXITRACE_ALLOW_ANONYMOUS', str(settings.allow_anonymous)).lower() == 'true':
+        return None
+    return current_user(request)
+
+
+def require_admin(user=Depends(current_user)):
+    if user['role'] != 'admin':
+        raise HTTPException(403, 'Administrator access required.')
+    return user

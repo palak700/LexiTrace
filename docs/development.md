@@ -1,3 +1,3 @@
 # LexiTrace
 
-See the root README.md for the current three-class architecture, setup, API, model training and PostgreSQL instructions.
+See the root README.md and docs/SRS_ALIGNMENT.md for current three-class labels, setup, API contracts, grouped data and limitations.

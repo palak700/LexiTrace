@@ -12,6 +12,7 @@ from transformers import (
 )
 
 from ml.evaluation.metrics import compute_classification_metrics
+from backend.app.core.labels import LABELS
 from ml.preprocessing.dataset import load_text_classification_dataset, tokenize_dataset
 
 
@@ -24,14 +25,17 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=8)
     args = parser.parse_args()
 
+    from pathlib import Path
+    if Path(args.output_dir).exists() and any(Path(args.output_dir).iterdir()):
+        raise ValueError('Choose a new empty output directory; existing checkpoints will not be overwritten.')
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     dataset = tokenize_dataset(load_text_classification_dataset(args.data), tokenizer)
 
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name,
-        num_labels=3,
-        id2label={0: "Human-Written", 1: "AI-Generated", 2: "AI-Transformed"},
-        label2id={"Human-Written": 0, "AI-Generated": 1, "AI-Transformed": 2},
+        num_labels=len(LABELS),
+        id2label=dict(enumerate(LABELS)),
+        label2id={label:index for index,label in enumerate(LABELS)},
     )
 
     def metrics(eval_pred):

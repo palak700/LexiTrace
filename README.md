@@ -1,112 +1,151 @@
-# LexiTrace — Detect → Localize Evidence → Explain
+# LexiTrace
 
-React/TypeScript/Vite/Tailwind frontend; FastAPI backend; independent three-class DeBERTa-v3 document and sentence classifiers; Captum Layer Integrated Gradients; PostgreSQL logging. No Docker required.
+LexiTrace uses the existing **three-class document checkpoint** with labels **Human**, **AI-Generated**, and **AI-Edited Human**. This restores the trained model with the user's explicit approval and supersedes the earlier two-class configuration. Checkpoint weights and metadata have not been rewritten or merged.
 
-## Quick start (Linux/macOS, Python 3.11 or 3.12, Node 20+)
-From the extracted LexiTrace directory:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r backend/requirements.txt
-cd frontend
-npm ci
-npm run build
-cd ../backend
-LEXITRACE_MODE=demo ../.venv/bin/python -m uvicorn app.main:app --reload --port 8000
-```
-In a second terminal:
-```bash
-cd LexiTrace/frontend
-npm run dev
-```
-Open the frontend on port 5173. Vite forwards /api to port 8000. Do not set VITE_API_BASE_URL unless using a separate API host.
+The React/Vite frontend, FastAPI backend, SQLite accounts, optional PostgreSQL analysis logging, grouped data validation and protected research area are retained. There is no separate sentence-model requirement. The frontend displays trained-model predictions only and has no demo branding.
 
-## Windows PowerShell
+## Windows setup
+
+From the extracted project root, using Python 3.12 and Node 20+:
+
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r ml/requirements.txt
+if (-not (Test-Path backend/.env)) { Copy-Item backend/.env.example backend/.env }
+if (-not (Test-Path frontend/.env.local)) { Copy-Item frontend/.env.example frontend/.env.local }
 cd frontend
-npm ci
-npm run build
-cd ../backend
-$env:LEXITRACE_MODE="demo"
-..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+npm.cmd ci
+cd ..
 ```
-Second terminal: `cd LexiTrace/frontend`, then `npm run dev`.
 
-## PostgreSQL (native installation, no container)
-Install PostgreSQL 16+ using your operating system's installer and start its service. In psql as an administrator:
-```sql
-CREATE USER lexitrace WITH PASSWORD 'choose-your-own-password';
-CREATE DATABASE lexitrace OWNER lexitrace;
-```
-Before starting the backend, export your connection string:
-```bash
-export DATABASE_URL='postgresql+psycopg://lexitrace:YOUR_URL_ENCODED_PASSWORD@localhost:5432/lexitrace'
-```
-PowerShell: `$env:DATABASE_URL="postgresql+psycopg://lexitrace:YOUR_URL_ENCODED_PASSWORD@localhost:5432/lexitrace"`.
-The table is created on first analysis. Only a text hash, length, class scores, model mode, timestamp and compact sentence evidence are stored; full input text and large attribution arrays are not stored. If unset, logging is visibly disabled. Database failures are reported as unavailable in the response/UI. Do not commit credentials.
+Preserve existing private environment files. `backend/.env` loads automatically; shell environment variables take precedence. Set `LEXITRACE_DOCUMENT_MODEL=../ml/models/document` for the supplied checkpoint. Relative server-configured model, evaluation and report paths resolve from the backend directory. Model weights, credentials, datasets and account databases stay out of Git.
 
-## Real models: data preparation, training and evaluation
-Only OpAI and LLMTrace are supported sources. Neither data nor trained weights are bundled. Supply CSV exports with `text,label` columns. Labels must be 0/1/2 or Human-Written/AI-Generated/AI-Transformed. Map source-specific labels explicitly before import; the project does not invent source schemas or annotations.
-
-Install ML dependencies from the repository root:
-```bash
-source .venv/bin/activate
-python -m pip install -r ml/requirements.txt
-python -m ml.preprocessing.prepare --opai /path/opai_documents.csv --llmtrace /path/llmtrace_documents.csv --component document --output ml/data/processed/document
-python -m ml.preprocessing.prepare --opai /path/opai_sentences.csv --llmtrace /path/llmtrace_sentences.csv --component sentence --output ml/data/processed/sentence
-python -m ml.training.train --data ml/data/processed/document --output-dir ml/models/document
-python -m ml.training.train --data ml/data/processed/sentence --output-dir ml/models/sentence
-python -m ml.evaluation.evaluate --data ml/data/processed/document --model-dir ml/models/document
-python -m ml.evaluation.evaluate --data ml/data/processed/sentence --model-dir ml/models/sentence
-```
-Sentence rows need actual sentence annotations: a mixed document's label must not be copied to all its sentences. Each class needs at least 10 unique rows. Exact normalized duplicates are removed, conflicting labels are excluded, and stratified 80/10/10 splits are saved. For sentence exports, keep related source documents in one split before import; the current CSV adapter lacks document IDs and cannot prevent related-sentence leakage. Avoid training/evaluating related documents across the two components if reporting combined performance.
-
-Training downloads microsoft/deberta-v3-base from Hugging Face. A GPU is recommended; CPU training is slow. Two checkpoints are loaded once per backend process, on CPU by default. Long documents use overlapping chunks; class probabilities are averaged over chunks. Sentence attribution is computed for the three strongest evidence sentences, up to 512 tokens per sentence, with 32 integration steps. Inspect convergence delta before relying on explanations. DeBERTa-v3 uses the Transformers `deberta-v2` architecture implementation.
-
-Start the real model backend from backend:
-```bash
-LEXITRACE_MODE=model ../.venv/bin/python -m uvicorn app.main:app --port 8000
-```
-Override paths with LEXITRACE_DOCUMENT_MODEL and LEXITRACE_SENTENCE_MODEL. Missing checkpoints return 503 rather than pretending demo scores are model results.
-
-## API and verification
-GET /api/health and /health; POST /api/analyze and /analyze with `{"text":"Your document."}`. Returns three-class prediction, confidence, probabilities, sentence evidence, selected token scores, linguistic estimates, mode and logging status. Health is liveness, not proof models/database are ready. There is no /evaluate endpoint: evaluation remains a CLI as in the original project.
-```bash
-cd backend
-../.venv/bin/python -m pytest -q
-curl -X POST http://127.0.0.1:8000/api/analyze -H 'Content-Type: application/json' -d '{"text":"This is an example. Another sentence follows."}'
-```
-Demo mode runs immediately without ML weights or PostgreSQL. It is an untrained demonstration, not validated AI detection, and returns no fabricated Integrated Gradients scores. Linguistic measures are approximate heuristics. Real model accuracy requires evaluation on held-out OpAI/LLMTrace annotations.
-
-See docs/AUDIT.md for the original repository audit and docs/VALIDATION.md for delivery checks and limitations.
-
-## Accounts and document dashboard
-
-The application now opens with User / Administrator login and signup. Passwords are hashed with PBKDF2-SHA256; opaque, revocable sessions are stored server-side and sent in HttpOnly, SameSite=Strict cookies. Sessions last 24 hours. Accounts persist in `backend/accounts.sqlite3` by default, independently of optional PostgreSQL analysis logging. Set `LEXITRACE_AUTH_DB` to change the location; keep this file private and back it up if accounts must survive machine changes.
-
-User registration is open. Administrator registration requires the setup code configured on the backend before startup. In PowerShell:
+Backend terminal, from the project root:
 
 ```powershell
-$env:LEXITRACE_ADMIN_SIGNUP_CODE="replace-with-a-long-random-secret"
+cd backend
+$env:LEXITRACE_MODE="model"
+$env:LEXITRACE_DOCUMENT_MODEL="../ml/models/document"
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-Choose Administrator on the signup page and enter this code. Without the environment variable, administrator signup is disabled. Existing administrators can still log in. Both roles can analyze documents; administrators additionally see model/logging diagnostics. No account-management actions are currently provided. For HTTPS deployments, set `LEXITRACE_COOKIE_SECURE=true`. Serve the frontend and API through the same site for the strict session cookie; the Vite proxy handles local development.
+Frontend terminal, from the project root:
 
-The dashboard provides **document-level results**, with no sentence or word-level classifications displayed. Upload a text-based PDF or UTF-8 `.txt` document, or paste its contents. Text-based PDFs can be uploaded directly; Word files must first be converted to plain text or PDF. The exact default limit is **20,000 characters**, including spaces and punctuation: approximately **3,000-4,000 English words**, depending on word length. There is no separate fixed word limit. A live word/character counter and server-side validation enforce the displayed character limit. Configure it using `LEXITRACE_MAX_TEXT_CHARS`; `GET /api/capabilities` supplies the dashboard with that value.
+```powershell
+cd frontend
+$env:LEXITRACE_API_TARGET="http://127.0.0.1:8000"
+npm.cmd run dev
+```
 
-`POST /api/analyze` and `/analyze` now require a signed-in session. Auth endpoints are `POST /api/auth/signup`, `POST /api/auth/login`, `GET /api/auth/me`, and `POST /api/auth/logout`. Login accepts `email`, `password`, and `role` (`user` or `admin`); signup additionally accepts `name` and, for admins, `admin_code`. For scripted requests, use a cookie jar to retain the session. The underlying analysis response still includes sentence evidence for API compatibility; the dashboard displays only the document assessment. Demo-mode results are clearly marked as untrained heuristics.
+Open the Local URL printed by Vite. Keep both terminals running. The same-site proxy supports HttpOnly session cookies. Leave `VITE_API_BASE_URL` empty for local development. The proxy reads `LEXITRACE_API_TARGET`, or `LEXITRACE_BACKEND_PORT` when no explicit target exists.
+
+Check health and actual weight loading:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8000/api/ready
+```
+
+Health reports liveness, active mode and checkpoint metadata. Readiness loads the real model and returns 503 with a useful message if files/dependencies are missing or incompatible. The first inference loads large weights and can take longer; the model is cached afterwards. Always use the project's `.venv` Python.
+
+## Model contract
+
+Expected checkpoint folder:
+
+```text
+ml/models/document/
+  config.json
+  model.safetensors (or pytorch_model.bin / standard shard index)
+  tokenizer.json
+  tokenizer_config.json
+```
+
+The config must declare DeBERTa-v3 (`model_type=deberta-v2`) with three output classes and exact label names Human, AI-Generated, AI-Edited Human. Any class-index order is supported by explicitly reordering probabilities from metadata. Incorrect labels, dimensions, incomplete weights or files are rejected; no untrained head is silently initialized. See `ml/model-config.example.json` for the label contract, not a replacement for trained weights.
+
+Inference uses overlapping 512-token windows and averages their probabilities, so complete documents are processed. Backend-only heuristic mode remains for controlled automated tests; the frontend rejects non-model prediction responses. No real accuracy claim follows merely from a successful inference request.
+
+## Accounts and dashboards
+
+Sign up before logging in; no default accounts exist. Login verifies email, password and account type. Passwords are PBKDF2-SHA256 hashes; opaque sessions last 24 hours with HttpOnly/SameSite=Strict cookies and logout revocation. Email/OTP verification is not implemented.
+
+Administrator signup requires a privately configured `LEXITRACE_ADMIN_SIGNUP_CODE`. For HTTPS hosting, set `LEXITRACE_COOKIE_SECURE=true` and serve frontend/API from the same site. Accounts/sessions remain in SQLite at `backend/accounts.sqlite3`, configurable with `LEXITRACE_AUTH_DB`. Existing user data is not migrated or deleted.
+
+The user dashboard contains the user's name, Logout, a text area, PDF/text upload, Analyze, and three confidence bars. The admin dashboard adds model/logging diagnostics and protected research tools. Login-required analysis is the default. `LEXITRACE_ALLOW_ANONYMOUS=true` enables guest prediction/extraction only; research routes always require an administrator.
+
+The corrected SRS was not supplied. The latest user approval explicitly restores the existing three-class model. Other SRS-dependent policies and research definitions remain pending confirmation; seminar materials were not changed.
+
+## Uploads and validation
+
+At least **50 whitespace-separated words** are required. Shorter input returns **text too short**. Maximum default length is **20,000 characters**, including spaces and punctuation (roughly 3,000-4,000 English words). `LEXITRACE_MAX_TEXT_CHARS` controls the shared API/dashboard limit.
+
+Upload PDFs or UTF-8 `.txt` files up to 5 MB. PDFs must be unlocked, at most 100 pages, and contain extractable text. Scanned PDFs require OCR outside this app. Extracted text fills the editable text area for review; short files can be loaded, but prediction still needs 50 words. Source files are not retained as application artifacts.
+
+## PostgreSQL logging
+
+Authentication remains SQLite. PostgreSQL is separate, optional analysis logging. Use your existing service/database, or create a new database/user without changing existing data:
+
+```sql
+CREATE USER lexitrace WITH PASSWORD '<choose-your-own-password>';
+CREATE DATABASE lexitrace OWNER lexitrace;
+```
+
+Configure privately in `backend/.env`, with URL-encoded credentials:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://USER:URL_ENCODED_PASSWORD@127.0.0.1:5432/lexitrace
+```
+
+On first successful logged analysis, `lexitrace_analysis` is created if absent. The existing schema is preserved. Stored fields include text hash, length, prediction, confidence, probabilities, mode and timestamp; the legacy evidence column stays empty. Full submitted text and sentence content are never stored. Unset or unavailable PostgreSQL disables logging without preventing predictions; errors report safe operation/exception context without credentials. Live connectivity requires an actual configured server and is separate from model readiness.
+
+## Data preparation, training and evaluation
+
+CSV inputs require `text,label` and `document_id` or `source_id`. Use exactly Human, AI-Generated, AI-Edited Human or numeric 0/1/2, respectively. Related variants must share globally consistent identifiers. Duplicate normalized text joins groups across files. Empty examples, invalid labels and conflicting duplicates are rejected; identical same-label examples are removed.
+
+Preparation keeps entire connected original-document/source groups together, with approximate 80/10/10 splits containing all three classes. It fails if independent groups are insufficient. Import, training and evaluation recheck duplicate/group disjointness. Correct original identifiers and checkpoint training provenance remain the data provider's responsibility.
+
+```powershell
+.\.venv\Scripts\python.exe -m ml.preprocessing.prepare --opai C:/data/opai.csv --llmtrace C:/data/llmtrace.csv --output ml/data/processed/document
+.\.venv\Scripts\python.exe -m ml.training.train --data ml/data/processed/document --output-dir ml/models/document-new
+.\.venv\Scripts\python.exe -m ml.evaluation.evaluate --data ml/data/processed/document --model-dir ml/models/document --output ml/research-reports/v0.json
+```
+
+Use new empty output directories/files to preserve existing data and weights. Training downloads the base model. Evaluation uses the same complete-document windowing as the API and only predicts the held-out test split after validating all splits. It reports accuracy, macro precision/recall/F1 and a **3x3 confusion matrix** (rows=true, columns=predicted; order Human, AI-Generated, AI-Edited Human), sample count and test hash. No suitable real held-out dataset has been supplied, so no measured project accuracy or benchmark scores are claimed.
+
+## API and explanations
+
+- `GET /api/health` (also `/health`): process liveness and model metadata.
+- `GET /api/ready` (also `/ready`): actual compatible model load; 503 if unavailable.
+- `GET /api/capabilities`: labels, limits, formats and access policy.
+- Auth endpoints: `/api/auth/signup`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout`.
+- `POST /api/documents/extract`: multipart `file`, returning extracted text/counts.
+- `POST /predict` (also `/api/predict`): JSON `{"text":"at least 50 words..."}`; returns label, confidence, three confidences, model_mode, disclaimer, sentences and explanation_method.
+- `POST /api/analyze` (also `/analyze`): document metadata, class probabilities, linguistic estimates, optional evidence and logging status.
+
+Optional `LEXITRACE_SENTENCE_EVIDENCE=true` applies the document classifier to the first 20 sentence fragments and displays the returned evidence. This is a model signal, not proof or a separately validated sentence detector; no sentence checkpoint is needed. Token attribution is unavailable. No explanations are fabricated in backend test mode.
+
+Administrator-only research:
+
+- `GET /api/research/status`: model/database status, v0-v8 report availability and outstanding prerequisites.
+- `POST /evaluate` (also `/api/evaluate`): evaluates server-configured `LEXITRACE_EVALUATION_DATA` using the current model. No caller-supplied filesystem paths are accepted; no report overwrites or text storage occur.
+- `LEXITRACE_RESEARCH_DIR`: optional `v0.json` through `v8.json` measured reports from the evaluation CLI. Only reports with the current three-label/3x3 schema are accepted. Fair comparisons require matching test-data hashes. Older binary reports are intentionally invalid for this model.
+- Transformation Fingerprint remains explicitly unavailable pending its corrected-SRS definition and suitable paired data. No benchmark or fingerprint results are invented.
+
+## Verification and branch
+
+```powershell
+$env:LEXITRACE_TEST_REAL_MODEL="1"
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+cd frontend
+npm.cmd run build
+```
+
+The opt-in real-model test loads the existing weights, checks readiness, signs in against a temporary account database and exercises `POST /predict`. Ordinary tests default to explicit backend test mode or controlled model substitutes. Tests verify software behavior; measured model accuracy requires held-out labeled data.
+
+Work remains on `feature/updated-lexitrace-project`. No merge or push to main was performed. This extracted directory had no local project history; a project-local feature repository was initialized without changing the unrelated home-directory main repository. Model weights, private environment files, account databases, processed data and local reports remain Git-ignored.
 
 
-The minimum input is **50 words**, enforced on the frontend and backend. Shorter input shows **text too short**. This is an input requirement, not a validated detection accuracy threshold.
+## Investigating high-score AI-Generated / AI-Edited Human confusion
 
+See `docs/PREDICTION_INVESTIGATION.md` for the latest evidence, local checkpoint SHA-256 values, missing assets, and safe reproduction/evaluation commands. A short generated control was misclassified even when 256-token, 512-token and production scores matched; integration success does not establish accuracy.
 
-### User dashboard prediction flow
-
-The user dashboard has a navbar with the signed-in user's name and Logout, a paste-text area, and an Analyze button. Analyze calls authenticated `POST /predict` with `{"text":"..."}`. Vite proxies this endpoint to the configured backend alongside `/api`. `/api/predict` is also available. The response includes `label`, `confidence`, `confidences` (Human, AI-Generated, AI-Edited Human), `model_mode`, and `disclaimer`. The result card displays exactly these three confidence bars. Internal model labels remain unchanged; the prediction endpoint maps them to the user-facing names.
-
-Both `/predict` and the existing `/analyze` endpoints require at least 50 whitespace-separated words and at most the configured character limit. Below 50 words, the API returns HTTP 422 with `{"detail":"text too short"}`. The admin dashboard retains its document upload and diagnostics; the user dashboard supports PDF/text uploads as well as pasted text.
-
-
-PDF uploads are available on both dashboards. `POST /api/documents/extract` accepts an authenticated multipart upload with field `file`. It returns extracted text for review in the text area before analysis. Files must be `.pdf` or UTF-8 `.txt`, at most 5 MB; PDFs must be unlocked and at most 100 pages. Extracted text must fit the configured character limit. Scanned PDFs with no text layer require OCR outside this application. Short documents can be loaded for editing, but Analyze still requires at least 50 words. Uploaded source files are not retained as application artifacts.
+Training tokenization and held-out evaluation now apply the same whitespace normalization as `/predict`. Evaluation JSON includes checkpoint fingerprints and `ai_generated_as_ai_edited_human_count`. Add `--errors-output NEW_FILE.csv` to record misclassified example hashes, group IDs, labels and scores without saving full text. Existing files and model weights are not overwritten.

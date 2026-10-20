@@ -1,6 +1,11 @@
+import sys
+from pathlib import Path
+# Allow the backend and ML CLI to share project modules from any working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
+from app.api.research import router as research_router
 from app.api.auth import router as auth_router
 from app.core.config import settings
 
@@ -13,3 +18,6 @@ app.add_middleware(
 app.include_router(router, prefix='/api')
 app.include_router(auth_router, prefix='/api')
 app.include_router(router)
+
+app.include_router(research_router, prefix='/api')
+app.include_router(research_router)

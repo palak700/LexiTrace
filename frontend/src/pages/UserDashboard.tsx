@@ -1,9 +1,10 @@
+import {EvidencePanel} from '../components/EvidencePanel';
 import {useEffect, useRef, useState, type ChangeEvent} from 'react';
 import {FileText, LogOut, Upload} from 'lucide-react';
 import {ApiError, extractDocument, predictText, request, type Capabilities, type PredictionResponse, type User} from '../services/api';
 
 const LABELS = ['Human','AI-Generated','AI-Edited Human'] as const;
-export function UserDashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void}) {
+export function UserDashboard({user,onSignedOut,onSignIn}:{user:User|null;onSignedOut:()=>void;onSignIn?:()=>void}) {
   const [text,setText]=useState('');
   const [result,setResult]=useState<PredictionResponse|null>(null);
   const [busy,setBusy]=useState(false);
@@ -55,7 +56,7 @@ export function UserDashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void
     finally {setSigningOut(false);}
   }
   return <div className="user-workspace">
-    <nav className="user-navbar" aria-label="User navigation"><a className="brand" href="/"><span className="brand-mark"><FileText size={22}/></span>LexiTrace</a><div className="user-navbar-actions"><span className="navbar-username">{user.name}</span><button className="text-button" disabled={busy||uploading||signingOut} onClick={logout}><LogOut size={17}/>{signingOut?'Logging out...':'Logout'}</button></div></nav>
+    <nav className="user-navbar" aria-label="User navigation"><a className="brand" href="/"><span className="brand-mark"><FileText size={22}/></span>LexiTrace</a><div className="user-navbar-actions"><span className="navbar-username">{user?.name??'Guest'}</span><button className="text-button" disabled={busy||uploading||signingOut} onClick={user?logout:onSignIn}><LogOut size={17}/>{user?(signingOut?'Logging out...':'Logout'):'Log in'}</button></div></nav>
     <main className="user-dashboard">
       <div className="user-heading"><p className="eyebrow">Your workspace</p><h1>Analyze your text</h1><p className="muted">Upload a PDF or paste at least {limits?.min_words??50} words to get an authorship assessment of the complete text.</p></div>
       <section className="panel" aria-labelledby="text-heading"><div className="panel-heading"><h2 id="text-heading">Text to analyze</h2><span className="status-pill">Minimum {limits?.min_words??50} words</span></div>
@@ -70,10 +71,11 @@ export function UserDashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void
         {error&&<p className="error" role="alert">{error}</p>}
         <div className="analysis-actions"><p className="muted">{limits?`Maximum ${limits.max_text_chars.toLocaleString()} characters, including spaces.`:'Loading input limits...'}</p><button className="primary" disabled={busy||uploading||signingOut||!limits||tooLong} onClick={analyze}>{busy?'Analyzing...':'Analyze'}</button></div>
       </section>
-      {result&&<section className="panel results" aria-label="Analysis result" aria-live="polite"><div className="panel-heading"><div><p className="eyebrow">Prediction</p><h2>{result.label}</h2><p className="muted">{(result.confidence*100).toFixed(1)}% confidence</p></div><span className="status-pill">{result.model_mode==='demo'?'Demo mode':'Model mode'}</span></div>
+      {result&&<section className="panel results" aria-label="Analysis result" aria-live="polite"><div className="panel-heading"><div><p className="eyebrow">Prediction</p><h2>{result.label}</h2><p className="muted">{(result.confidence*100).toFixed(1)}% model score</p></div><span className="status-pill">LexiTrace analysis</span></div>
         <div className="probabilities">{LABELS.map((label,index)=>{const percent=result.confidences[label]*100;return <div key={label}><div className="probability-label"><span>{label}</span><strong>{percent.toFixed(1)}%</strong></div><div className={`probability-track confidence-${index}`} role="progressbar" aria-label={`${label} confidence`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(percent.toFixed(1))}><div style={{width:`${percent}%`}}/></div></div>;})}</div>
-        {result.model_mode==='demo'&&<p className="demo-warning">Demo mode uses untrained heuristics. These scores are not validated AI detection.</p>}
         <p className="muted result-disclaimer">{result.disclaimer}</p>
+        <p className="muted">A high class score can still be wrong; it is not a measured accuracy percentage.</p>
+        <EvidencePanel sentences={result.sentences} method={result.explanation_method}/>
       </section>}
     </main>
   </div>;
