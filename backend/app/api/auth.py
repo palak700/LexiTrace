@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from app.services.email_verification import send_admin_code
 
 router = APIRouter(prefix='/auth')
 COOKIE = 'lexitrace_session'
@@ -17,7 +18,33 @@ def database():
     db.row_factory = sqlite3.Row
     db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL)')
     db.execute('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires REAL NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS admin_challenges (token TEXT PRIMARY KEY, user_id INTEGER UNIQUE NOT NULL, code_hash TEXT NOT NULL, expires REAL NOT NULL, sent_at REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)')
     return db
+
+
+def challenge_hash(token, code):
+    return hashlib.sha256(f'{token}:{code}'.encode()).hexdigest()
+
+
+def start_admin_verification(db, row):
+    # Serialize issuance so concurrent requests cannot bypass the cooldown.
+    if not db.in_transaction:
+        db.execute('BEGIN IMMEDIATE')
+    now = time.time()
+    previous = db.execute('SELECT sent_at FROM admin_challenges WHERE user_id=?', (row['id'],)).fetchone()
+    if previous and now - previous['sent_at'] < 60:
+        raise HTTPException(429, 'Please wait 60 seconds before requesting another code.')
+    token = secrets.token_urlsafe(32)
+    code = f'{secrets.randbelow(1000000):06d}'
+    try:
+        send_admin_code(row['email'], code)
+    except Exception as exc:
+        raise HTTPException(503, 'Unable to send the verification email. Please contact the administrator or try again later.') from exc
+    db.execute('DELETE FROM admin_challenges WHERE expires<=? OR user_id=?', (now, row['id']))
+    db.execute('INSERT INTO admin_challenges (token,user_id,code_hash,expires,sent_at) VALUES (?,?,?,?,?)',
+               (hashlib.sha256(token.encode()).hexdigest(), row['id'], challenge_hash(token, code), now + 600, now))
+    db.commit()
+    return {'verification_required': True, 'challenge_id': token, 'expires_in': 600}
 
 def password_hash(password, salt=None):
     salt = salt or secrets.token_hex(16)
@@ -53,6 +80,11 @@ class Registration(Credentials):
     name: str = Field(min_length=1, max_length=100)
     admin_code: str = Field(default='', max_length=256)
 
+
+class AdminVerification(BaseModel):
+    challenge_id: str = Field(min_length=40, max_length=128)
+    code: str = Field(pattern=r'^[0-9]{6}$')
+
 @router.post('/signup', status_code=201)
 def signup(payload: Registration, response: Response):
     email = payload.email.strip().lower()
@@ -68,8 +100,13 @@ def signup(payload: Registration, response: Response):
             cursor = db.execute('INSERT INTO users (name,email,password,role) VALUES (?,?,?,?)', (payload.name.strip(), email, password_hash(payload.password), payload.role))
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, 'An account with this email already exists.') from exc
-        start_session(db, response, cursor.lastrowid)
-        return public_user(db.execute('SELECT * FROM users WHERE id=?', (cursor.lastrowid,)).fetchone())
+        row = db.execute('SELECT * FROM users WHERE id=?', (cursor.lastrowid,)).fetchone()
+        if row['role'] == 'admin':
+            # Keep the account available for a login retry if email delivery fails.
+            db.commit()
+            return start_admin_verification(db, row)
+        start_session(db, response, row['id'])
+        return public_user(row)
     finally:
         db.close()
 
@@ -82,6 +119,30 @@ def login(payload: Credentials, response: Response):
         valid = hmac.compare_digest(stored, password_hash(payload.password, stored.split(':')[0]))
         if not row or not valid or row['role'] != payload.role:
             raise HTTPException(401, 'Email, password, or account type is incorrect.')
+        if row['role'] == 'admin':
+            return start_admin_verification(db, row)
+        start_session(db, response, row['id'])
+        return public_user(row)
+    finally:
+        db.close()
+
+@router.post('/verify-admin')
+def verify_admin(payload: AdminVerification, response: Response):
+    db = database()
+    try:
+        db.execute('BEGIN IMMEDIATE')
+        token_hash = hashlib.sha256(payload.challenge_id.encode()).hexdigest()
+        challenge = db.execute('SELECT * FROM admin_challenges WHERE token=?', (token_hash,)).fetchone()
+        if not challenge or challenge['expires'] <= time.time() or challenge['attempts'] >= 5:
+            raise HTTPException(401, 'Verification expired or unavailable. Sign in again to request a new code.')
+        if not hmac.compare_digest(challenge['code_hash'], challenge_hash(payload.challenge_id, payload.code)):
+            db.execute('UPDATE admin_challenges SET attempts=attempts+1 WHERE token=?', (token_hash,))
+            db.commit()
+            raise HTTPException(401, 'Incorrect verification code. After 5 incorrect attempts, request a new code.')
+        row = db.execute('SELECT * FROM users WHERE id=? AND role=?', (challenge['user_id'], 'admin')).fetchone()
+        if not row:
+            raise HTTPException(401, 'Administrator account is unavailable.')
+        db.execute('DELETE FROM admin_challenges WHERE token=?', (token_hash,))
         start_session(db, response, row['id'])
         return public_user(row)
     finally:

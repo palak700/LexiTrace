@@ -1,7 +1,6 @@
 import {TokenExplanation} from '../components/TokenExplanation';
 import {AnalysisLimits, AnalysisWarnings, MIN_ANALYSIS_WORDS, UNCERTAIN_CONFIDENCE} from '../components/AnalysisGuidance';
 import {EvidencePanel} from '../components/EvidencePanel';
-import {ResearchPanel} from '../components/ResearchPanel';
 import {useEffect, useRef, useState, type ChangeEvent} from 'react';
 import {ArrowRight, FileText, LayoutDashboard, LogOut, ShieldCheck, Upload, Info} from 'lucide-react';
 import {analyzeText, ApiError, extractDocument, request, type Capabilities, type User} from '../services/api';
@@ -94,7 +93,6 @@ export function Dashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void}) {
           <EvidencePanel sentences={result.sentences} method={result.explanation_method}/>
           {user.role==='admin'&&<details className="admin-details"><summary>Administrator diagnostics</summary><p>Model: {result.model_name} / Logging: {result.logging_status}</p><p>Linguistic estimates describe the document and do not identify AI-written words.</p><pre>{JSON.stringify(result.linguistic_features,null,2)}</pre></details>}
         </section>}
-        <ResearchPanel text={text}/>
         <footer className="dashboard-footer">LexiTrace <span>AI detection is probabilistic, not proof of authorship.</span></footer>
       </main>
     </div>

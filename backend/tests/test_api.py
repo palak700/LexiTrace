@@ -9,15 +9,22 @@ from app.main import app
 
 @pytest.fixture
 def client(monkeypatch, tmp_path):
+    from app.api import auth
     monkeypatch.setenv('LEXITRACE_AUTH_DB', str(tmp_path / 'accounts.sqlite3'))
     monkeypatch.setenv('LEXITRACE_ADMIN_SIGNUP_CODE', 'test-admin-code')
+    monkeypatch.setattr(auth, 'send_admin_code', lambda email, code: setattr(app.state, 'test_admin_code', code))
     with TestClient(app) as instance:
         yield instance
 
 def register(client, **overrides):
     payload = {'name':'Test User', 'email':'user@example.com', 'password':'test-password-123', 'role':'user'}
     payload.update(overrides)
-    return client.post('/api/auth/signup', json=payload)
+    response = client.post('/api/auth/signup', json=payload)
+    if response.status_code == 201 and response.json().get('verification_required'):
+        verified = client.post('/api/auth/verify-admin', json={'challenge_id': response.json()['challenge_id'], 'code': app.state.test_admin_code})
+        assert verified.status_code == 200
+        return verified
+    return response
 
 @pytest.fixture
 def signed_in(client):

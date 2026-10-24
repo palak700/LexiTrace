@@ -66,7 +66,7 @@ Inference uses overlapping 512-token windows and averages their probabilities, s
 
 ## Accounts and dashboards
 
-Sign up before logging in; no default accounts exist. Login verifies email, password and account type. Passwords are PBKDF2-SHA256 hashes; opaque sessions last 24 hours with HttpOnly/SameSite=Strict cookies and logout revocation. Email/OTP verification is not implemented.
+Sign up before logging in; no default accounts exist. Login verifies email, password and account type. Administrator login and signup additionally require a single-use six-digit email code before issuing a session. Codes expire after 10 minutes, allow five incorrect attempts, and can be replaced by signing in again after 60 seconds. Configure the `LEXITRACE_SMTP_*` settings in `backend/.env` using [backend/.env.example](backend/.env.example), then restart the backend; administrator sign-in is blocked if email delivery is unavailable. See [backend/README.md](backend/README.md) for the verification API. Passwords are PBKDF2-SHA256 hashes; opaque sessions last 24 hours with HttpOnly/SameSite=Strict cookies and logout revocation.
 
 Administrator signup requires a privately configured `LEXITRACE_ADMIN_SIGNUP_CODE`. For HTTPS hosting, set `LEXITRACE_COOKIE_SECURE=true` and serve frontend/API from the same site. Accounts/sessions remain in SQLite at `backend/accounts.sqlite3`, configurable with `LEXITRACE_AUTH_DB`. Existing user data is not migrated or deleted.
 
