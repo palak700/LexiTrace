@@ -1,4 +1,6 @@
 import {TokenExplanation} from '../components/TokenExplanation';
+import {AdminLogs} from '../components/AdminLogs';
+import {AnalysisHistory, HistoryConsent, SavedResultActions} from '../components/AnalysisHistory';
 import {AnalysisLimits, AnalysisWarnings, MIN_ANALYSIS_WORDS, UNCERTAIN_CONFIDENCE} from '../components/AnalysisGuidance';
 import {EvidencePanel} from '../components/EvidencePanel';
 import {useEffect, useRef, useState, type ChangeEvent} from 'react';
@@ -8,6 +10,8 @@ import type {AnalysisResponse} from '../types/analysis';
 
 export function Dashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void}) {
   const [text,setText] = useState('');
+  const [saveText,setSaveText] = useState(false);
+  const [historyKey,setHistoryKey] = useState<string>();
   const [filename,setFilename] = useState('');
   const [result,setResult] = useState<AnalysisResponse|null>(null);
   const [busy,setBusy] = useState(false);
@@ -30,7 +34,7 @@ export function Dashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void}) {
   async function run() {
     if(tooShort||tooLong||!limits) return;
     setBusy(true);setError('');setResult(null);
-    try { setResult(await analyzeText(text)); }
+    try { const next=await analyzeText(text,saveText);setResult(next);if(next.history_id) setHistoryKey(next.history_id); }
     catch(e) { if(e instanceof ApiError && e.status===401) onSignedOut(); else setError(e instanceof Error?e.message:'Analysis failed.'); }
     finally { setBusy(false); }
   }
@@ -82,6 +86,7 @@ export function Dashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void}) {
           <AnalysisWarnings words={words}/>
           {tooLong&&<p className="error" role="alert">Shorten your document to {limits?.max_text_chars.toLocaleString()} characters before analyzing.</p>}
           {error&&<p className="error" role="alert">{error}</p>}
+          <HistoryConsent checked={saveText} onChange={setSaveText} disabled={busy||uploading}/>
           <div className="analysis-actions"><p className="muted">Results apply to the complete document.</p><button className="primary" disabled={busy||uploading||!text.trim()||tooLong||tooShort||!limits} onClick={run}>{busy?'Analyzing document...':'Analyze document'}<ArrowRight size={18}/></button></div>
         </section>
         {result&&<section className="panel results" aria-live="polite"><div className="panel-heading"><div><p className="eyebrow">Document assessment</p><h2>{result.confidence<UNCERTAIN_CONFIDENCE?'Uncertain':result.prediction}</h2><p className="muted">{(result.confidence*100).toFixed(1)}% model score for the whole document</p></div><span className="status-pill">LexiTrace analysis</span></div>
@@ -89,10 +94,13 @@ export function Dashboard({user,onSignedOut}:{user:User;onSignedOut:()=>void}) {
           <div className="probabilities">{Object.entries(result.class_probabilities).map(([label,score])=><div key={label}><div className="probability-label"><span>{label}</span><strong>{(score*100).toFixed(1)}%</strong></div><div className="probability-track"><div style={{width:`${score*100}%`}}/></div></div>)}</div>
           <p className="muted">Results are a probability estimate, not proof. {result.disclaimer}</p>
           <p className="muted">A high class score can still be wrong; it is not a measured accuracy percentage.</p>
-          <TokenExplanation text={text} onSignedOut={onSignedOut}/>
+          <SavedResultActions result={result} onSignedOut={onSignedOut}/>
+          <TokenExplanation key={result.history_id??text} text={text} historyId={result.history_id} onSignedOut={onSignedOut}/>
           <EvidencePanel sentences={result.sentences} method={result.explanation_method}/>
           {user.role==='admin'&&<details className="admin-details"><summary>Administrator diagnostics</summary><p>Model: {result.model_name} / Logging: {result.logging_status}</p><p>Linguistic estimates describe the document and do not identify AI-written words.</p><pre>{JSON.stringify(result.linguistic_features,null,2)}</pre></details>}
         </section>}
+        <AnalysisHistory refreshKey={historyKey} onSignedOut={onSignedOut}/>
+        {user.role==='admin'&&<AdminLogs refreshKey={historyKey} onSignedOut={onSignedOut}/>}
         <footer className="dashboard-footer">LexiTrace <span>AI detection is probabilistic, not proof of authorship.</span></footer>
       </main>
     </div>

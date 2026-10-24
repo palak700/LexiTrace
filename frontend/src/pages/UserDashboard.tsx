@@ -1,4 +1,5 @@
 import {TokenExplanation} from '../components/TokenExplanation';
+import {AnalysisHistory, HistoryConsent, SavedResultActions} from '../components/AnalysisHistory';
 import {AnalysisLimits, AnalysisWarnings, MIN_ANALYSIS_WORDS, UNCERTAIN_CONFIDENCE} from '../components/AnalysisGuidance';
 import {EvidencePanel} from '../components/EvidencePanel';
 import {useEffect, useRef, useState, type ChangeEvent} from 'react';
@@ -8,6 +9,8 @@ import {ApiError, extractDocument, predictText, request, type Capabilities, type
 const LABELS = ['Human','AI-Generated','AI-Edited Human'] as const;
 export function UserDashboard({user,onSignedOut,onSignIn}:{user:User|null;onSignedOut:()=>void;onSignIn?:()=>void}) {
   const [text,setText]=useState('');
+  const [saveText,setSaveText]=useState(false);
+  const [historyKey,setHistoryKey]=useState<string>();
   const [result,setResult]=useState<PredictionResponse|null>(null);
   const [busy,setBusy]=useState(false);
   const [uploading,setUploading]=useState(false);
@@ -32,7 +35,7 @@ export function UserDashboard({user,onSignedOut,onSignIn}:{user:User|null;onSign
     setAttempted(true);setError('');setResult(null);
     if(tooShort||tooLong||!limits) return;
     setBusy(true);
-    try {setResult(await predictText(text));}
+    try {const next=await predictText(text,saveText);setResult(next);if(next.history_id) setHistoryKey(next.history_id);}
     catch(e) {if(e instanceof ApiError&&e.status===401) onSignedOut(); else setError(e instanceof Error?e.message:'Analysis failed. Please try again.');}
     finally {setBusy(false);}
   }
@@ -73,6 +76,7 @@ export function UserDashboard({user,onSignedOut,onSignIn}:{user:User|null;onSign
         <AnalysisWarnings words={words}/>
         {limitsError&&<p className="error" role="alert">Unable to load input limits. <button className="text-button" onClick={loadLimits}>Try again</button></p>}
         {error&&<p className="error" role="alert">{error}</p>}
+        {user&&<HistoryConsent checked={saveText} onChange={setSaveText} disabled={busy||uploading||signingOut}/>}
         <div className="analysis-actions"><p className="muted">{limits?`Maximum ${limits.max_text_chars.toLocaleString()} characters, including spaces.`:'Loading input limits...'}</p><button className="primary" disabled={busy||uploading||signingOut||!limits||tooLong||tooShort} onClick={analyze}>{busy?'Analyzing...':'Analyze'}</button></div>
       </section>
       {result&&<section className="panel results" aria-label="Analysis result" aria-live="polite"><div className="panel-heading"><div><p className="eyebrow">Prediction</p><h2>{result.confidence<UNCERTAIN_CONFIDENCE?'Uncertain':result.label}</h2><p className="muted">{(result.confidence*100).toFixed(1)}% model score</p></div><span className="status-pill">LexiTrace analysis</span></div>
@@ -80,9 +84,11 @@ export function UserDashboard({user,onSignedOut,onSignIn}:{user:User|null;onSign
         <div className="probabilities">{LABELS.map((label,index)=>{const percent=result.confidences[label]*100;return <div key={label}><div className="probability-label"><span>{label}</span><strong>{percent.toFixed(1)}%</strong></div><div className={`probability-track confidence-${index}`} role="progressbar" aria-label={`${label} confidence`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(percent.toFixed(1))}><div style={{width:`${percent}%`}}/></div></div>;})}</div>
         <p className="muted result-disclaimer">Results are a probability estimate, not proof. {result.disclaimer}</p>
         <p className="muted">A high class score can still be wrong; it is not a measured accuracy percentage.</p>
-        <TokenExplanation text={text} onSignedOut={onSignedOut}/>
+        {user&&<SavedResultActions result={result} onSignedOut={onSignedOut}/>}
+        <TokenExplanation key={result.history_id??text} text={text} historyId={result.history_id} onSignedOut={onSignedOut}/>
           <EvidencePanel sentences={result.sentences} method={result.explanation_method}/>
       </section>}
+      {user&&<AnalysisHistory refreshKey={historyKey} onSignedOut={onSignedOut}/>}
     </main>
   </div>;
 }

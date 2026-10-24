@@ -1,5 +1,6 @@
 """Three-class document classifier. Incompatible checkpoints fail closed."""
 import json
+import hashlib
 import logging
 import os
 import re
@@ -171,11 +172,22 @@ def analyze(text):
         with load_lock:
             classifier = document_model(document_model_path())
     probabilities = classifier.predict(text) if classifier else demo_predict(text)
+    version = 'demo-untrained' if not classifier else 'Unavailable'
+    if classifier and hasattr(classifier, 'checkpoint_signature'):
+        from app.services.prediction_diagnostics import checkpoint_signature, file_fingerprints
+        root = classifier.checkpoint_directory
+        if checkpoint_signature(root) != classifier.checkpoint_signature:
+            raise ModelUnavailable('Checkpoint files changed. Restart the backend before analyzing.')
+        fingerprints = file_fingerprints(str(root), classifier.checkpoint_signature)
+        version = 'sha256:' + hashlib.sha256(json.dumps(fingerprints, sort_keys=True).encode()).hexdigest()
+        if checkpoint_signature(root) != classifier.checkpoint_signature:
+            raise ModelUnavailable('Checkpoint files changed while identifying the model. Restart the backend.')
     target = int(np.argmax(probabilities))
     evidence = sentence_evidence(text, classifier) if classifier and os.getenv('LEXITRACE_SENTENCE_EVIDENCE', 'false').lower() == 'true' else []
     result = {'text': text, 'prediction': LABELS[target], 'confidence': probabilities[target],
               'class_probabilities': dict(zip(LABELS, probabilities)), 'analysis_level': 'document', 'model_mode': mode,
               'model_name': 'DeBERTa-v3 document classifier' if classifier else 'Demo heuristics',
+              'model_version': version,
               'sentences': evidence, 'explanation_method': 'Document classifier applied to sentence fragments (first 20); model signals, not proof.' if evidence else 'No sentence or token explanations available.',
               'linguistic_features': analyze_linguistic_features(text),
               'disclaimer': 'AI detection is probabilistic, not proof of authorship. Model scores are not measured accuracy.' + (' Demo mode is untrained and not validated.' if mode == 'demo' else '')}

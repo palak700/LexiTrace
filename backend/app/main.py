@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.api.research import router as research_router
 from app.api.auth import router as auth_router
+from app.api.history import router as history_router
+from app.api.admin_logs import router as admin_logs_router
 from app.core.config import settings
 
 app = FastAPI(title='LexiTrace API', description='Document-level AI text detection API', version='0.2.0')
@@ -17,6 +19,8 @@ app.add_middleware(
 )
 app.include_router(router, prefix='/api')
 app.include_router(auth_router, prefix='/api')
+app.include_router(history_router, prefix='/api')
+app.include_router(admin_logs_router, prefix='/api')
 app.include_router(router)
 
 app.include_router(research_router, prefix='/api')

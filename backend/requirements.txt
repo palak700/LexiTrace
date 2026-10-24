@@ -13,3 +13,4 @@ psycopg[binary]==3.2.9
 
 pypdf==6.21.1
 python-multipart==0.0.20
+reportlab==5.1.0

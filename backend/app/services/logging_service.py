@@ -35,6 +35,35 @@ def database_status():
         return {'status': 'unavailable', 'message': 'PostgreSQL is unavailable; analysis remains usable without logging.'}
 
 
+def recent_analysis_logs(start_at=None, end_at=None, offset=0, limit=20):
+    """Read only safe analysis metadata; never return hashes, evidence or raw errors."""
+    empty = {'items': [], 'total': 0}
+    if not os.getenv('DATABASE_URL'):
+        return {**empty, 'status': 'disabled', 'message': 'Analysis logging is disabled. Configure PostgreSQL DATABASE_URL to record and view analysis activity.'}
+    try:
+        with engine().connect() as connection:
+            if connection.execute(text("SELECT to_regclass('lexitrace_analysis')")).scalar() is None:
+                return {**empty, 'status': 'available', 'message': 'Logging is connected. No analyses have been logged yet.'}
+            clauses, args = [], {'offset': offset, 'limit': limit}
+            if start_at:
+                clauses.append('created_at >= :start_at')
+                args['start_at'] = start_at
+            if end_at:
+                clauses.append('created_at <= :end_at')
+                args['end_at'] = end_at
+            where = ' WHERE ' + ' AND '.join(clauses) if clauses else ''
+            total = connection.execute(text('SELECT COUNT(*) FROM lexitrace_analysis' + where), args).scalar()
+            rows = connection.execute(text(
+                'SELECT id, created_at, character_count, prediction, confidence, model_mode '
+                'FROM lexitrace_analysis' + where + ' ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset'
+            ), args).mappings().all()
+            return {'status': 'available', 'message': 'Stored analysis activity. Dates are shown in your local time.',
+                    'items': [dict(row) for row in rows], 'total': total}
+    except Exception as exc:
+        logger.warning('Analysis log read failed (%s); connection details withheld.', type(exc).__name__)
+        return {**empty, 'status': 'unavailable', 'message': 'Analysis logs are temporarily unavailable. Check the PostgreSQL connection and try again.'}
+
+
 class LoggingService:
     def store(self, result):
         try:

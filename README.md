@@ -74,6 +74,18 @@ The user dashboard contains the user's name, Logout, a text area, PDF/text uploa
 
 The corrected SRS was not supplied. The latest user approval explicitly restores the existing three-class model. Other SRS-dependent policies and research definitions remain pending confirmation; seminar materials were not changed.
 
+## Analysis history and PDF reports
+
+Both signed-in dashboards automatically save result summaries to private, account-scoped history in the authentication SQLite database. Browse previous assessments, filter by inclusive UTC date ranges, page through results, view all three class scores, and delete individual records. Other users, including administrators, cannot access another account's history. Guest analyses are not saved.
+
+The **Save document text with this analysis** checkbox is off by default. Without consent, history stores scores, timestamps, model metadata, input counts, and the explanation method; it omits document text and sentence excerpts. With consent, normalized document text and available sentence evidence are also saved. Source files are never retained. Deleting a record removes its stored result, saved text, and report access.
+
+Use **Download PDF report** under a new result or in history. Reports include the prediction, all three class scores, original analysis timestamp in UTC, model name and version, explanation method, available consented sentence evidence, and limitations. Reports use the saved snapshot and do not rerun inference. Model versions fingerprint the loaded checkpoint files with SHA-256; initial fingerprinting can add time to the first analysis. **Explain with Captum** also attaches its interpretation summary to the matching history record and future PDFs. This saves scope, target class, convergence information, and limitations; token text and individual token attributions are never persisted.
+
+Install updated backend dependencies with `.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt` and restart the backend. ReportLab generates PDFs in memory; no report files are retained on the server. History-save failures leave the prediction available and show an explicit warning in the dashboard.
+
+History API (session required): `GET /api/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&offset=0&limit=10`, `GET /api/history/{id}`, `DELETE /api/history/{id}`, and `GET /api/history/{id}/report.pdf`. Analysis and prediction endpoints accept optional `save_text: false` and return `history_id`, `created_at`, `text_saved`, and `history_saved` for saved signed-in analyses. Previous analyses from before this feature cannot be recovered into history.
+
 ## Uploads and validation
 
 At least **50 whitespace-separated words** are required. Shorter input returns **text too short**. Maximum default length is **20,000 characters**, including spaces and punctuation (roughly 3,000-4,000 English words). `LEXITRACE_MAX_TEXT_CHARS` controls the shared API/dashboard limit.
@@ -81,6 +93,8 @@ At least **50 whitespace-separated words** are required. Shorter input returns *
 Upload PDFs or UTF-8 `.txt` files up to 5 MB. PDFs must be unlocked, at most 100 pages, and contain extractable text. Scanned PDFs require OCR outside this app. Extracted text fills the editable text area for review; short files can be loaded, but prediction still needs 50 words. Source files are not retained as application artifacts.
 
 ## PostgreSQL logging
+
+The administrator dashboard includes an **Analysis logs** panel with recent successful analyses across accounts and guests, UTC date filters, pagination, and manual refresh. It shows timestamp, prediction, model score, character count, and mode. `GET /api/admin/logs` requires an administrator session and exposes no document text, sentence evidence, hashes, or credentials. Logging disabled/unavailable states are displayed explicitly. These logs are separate from private user history and do not include login events or server error traces.
 
 Authentication remains SQLite. PostgreSQL is separate, optional analysis logging. Use your existing service/database, or create a new database/user without changing existing data:
 

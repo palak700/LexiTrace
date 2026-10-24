@@ -1,4 +1,4 @@
-import type { AnalysisResponse, ProductLabel, SentenceEvidence } from '../types/analysis';
+import type { AnalysisResponse, ProductLabel, SentenceEvidence, HistoryMetadata } from '../types/analysis';
 export type User = {id:number; name:string; email:string; role:'admin'|'user'};
 export type Capabilities = {max_text_chars:number; min_words:number; max_upload_bytes:number; upload_formats:string[]; analysis_level:string;labels:ProductLabel[];allow_anonymous:boolean;model_mode:string};
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -15,7 +15,7 @@ export async function request<T>(path:string, options:RequestInit = {}, prefix='
       Array.isArray(payload.detail) ? payload.detail.map((item:{msg:string})=>item.msg).join('. ') : 'Request failed. Please try again.';
     throw new ApiError(detail, response.status);
   }
-  return response.json();
+  return response.status===204?undefined as T:response.json();
 }
 function trainedModelResult<T extends {model_mode:string}>(result:T):T {
   if(result.model_mode!=='model') {
@@ -23,11 +23,11 @@ function trainedModelResult<T extends {model_mode:string}>(result:T):T {
   }
   return result;
 }
-export async function analyzeText(text:string) {
-  return trainedModelResult(await request<AnalysisResponse>('/analyze', {method:'POST', body:JSON.stringify({text})}));
+export async function analyzeText(text:string, save_text=false) {
+  return trainedModelResult(await request<AnalysisResponse>('/analyze', {method:'POST', body:JSON.stringify({text,save_text})}));
 }
 
-export type PredictionResponse = {
+export type PredictionResponse = HistoryMetadata & {
   label: ProductLabel;
   confidence:number;
   confidences:Record<ProductLabel,number>;
@@ -36,8 +36,28 @@ export type PredictionResponse = {
   sentences?:SentenceEvidence[];
   explanation_method?:string;
 };
-export async function predictText(text:string) {
-  return trainedModelResult(await request<PredictionResponse>('/predict', {method:'POST',body:JSON.stringify({text})}, ''));
+export async function predictText(text:string, save_text=false) {
+  return trainedModelResult(await request<PredictionResponse>('/predict', {method:'POST',body:JSON.stringify({text,save_text})}, ''));
+}
+
+export type HistoryRecord = {
+  id:string;created_at:string;text_saved:boolean;text?:string|null;
+  result:{prediction:ProductLabel;confidence:number;class_probabilities:Record<ProductLabel,number>;
+    model_name:string;model_version?:string;model_mode:string;word_count:number;character_count:number;
+    disclaimer:string;explanation_method?:string;sentences?:SentenceEvidence[];
+    explanation?:{method?:string;target_label?:string;scope?:string;disclaimer?:string;approximation_warning?:boolean}};
+};
+
+export async function downloadReport(id:string) {
+  const response=await fetch(`${API_BASE_URL}/api/history/${encodeURIComponent(id)}/report.pdf`,{credentials:'include'});
+  if(!response.ok) {
+    const payload=await response.json().catch(()=>({}));
+    throw new ApiError(typeof payload.detail==='string'?payload.detail:'Unable to download the report.',response.status);
+  }
+  const url=URL.createObjectURL(await response.blob());
+  const link=document.createElement('a');link.href=url;link.download=`lexitrace-${id}.pdf`;
+  document.body.appendChild(link);link.click();link.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 export function extractDocument(file:File) {

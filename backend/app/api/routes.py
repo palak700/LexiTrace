@@ -20,6 +20,8 @@ explanation_lock = Lock()
 
 
 class AnalysisRequest(BaseModel):
+    save_text: bool = False
+    history_id: str | None = Field(default=None, max_length=32)
     text: str = Field(
         min_length=1,
         max_length=settings.max_text_chars,
@@ -34,13 +36,26 @@ def explain_route(payload: AnalysisRequest, user=Depends(analysis_access)):
         raise HTTPException(422, 'Text must contain letters or numbers.')
     if current_mode() != 'model':
         raise HTTPException(503, 'Explanations require the trained model; test-mode explanations are unavailable.')
+    if payload.history_id:
+        if not user:
+            raise HTTPException(401, 'Sign in to attach an explanation to history.')
+        from app.services.history import check_explanation_source
+        check_explanation_source(payload.history_id, user['id'], normalize_text(payload.text))
     if not explanation_lock.acquire(blocking=False):
         raise HTTPException(429, 'Another explanation is running. Please try again shortly.')
     try:
         from app.services.explanations import explain_text
         with load_lock:
             classifier = document_model(document_model_path())
-        return explain_text(classifier, normalize_text(payload.text))
+        result = explain_text(classifier, normalize_text(payload.text))
+        if payload.history_id:
+            from app.services.history import save_explanation
+            try:
+                result['history_explanation_saved'] = save_explanation(payload.history_id, user['id'], result)
+            except Exception:
+                logger.error('Explanation history update failed; source and error details withheld.')
+                result['history_explanation_saved'] = False
+        return result
     except ModelUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
     except Exception:
@@ -78,7 +93,7 @@ def analyze_route(payload: AnalysisRequest, user=Depends(analysis_access)):
         raise HTTPException(422, 'Text must contain letters or numbers.')
 
     try:
-        return analyze(payload.text)
+        result = analyze(payload.text)
     except ModelUnavailable as e:
         raise HTTPException(503, str(e)) from e
     except Exception:
@@ -87,6 +102,16 @@ def analyze_route(payload: AnalysisRequest, user=Depends(analysis_access)):
             500,
             'Analysis failed. Check backend configuration and logs.',
         )
+
+    if user:
+        from app.services.history import save_analysis
+        try:
+            result.update(save_analysis(user['id'], result, payload.save_text))
+            result['history_saved'] = True
+        except Exception:
+            logger.error('History save failed; source text and error details withheld.')
+            result['history_saved'] = False
+    return result
 
 
 @router.post('/predict')
@@ -101,6 +126,7 @@ def predict_route(payload: AnalysisRequest, user=Depends(analysis_access)):
             for label, score in result['class_probabilities'].items()
         },
         'model_mode': result['model_mode'],
+        **{key: result[key] for key in ('history_id', 'created_at', 'text_saved', 'history_saved', 'model_name', 'model_version') if key in result},
         'disclaimer': result['disclaimer'],
         'sentences': result.get('sentences', []),
         'explanation_method': result.get('explanation_method', 'No explanations available.'),

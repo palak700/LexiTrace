@@ -6,15 +6,16 @@ type Explanation = {
   method:string; target_label:ProductLabel; scope:string; partial:boolean; text:string;
   window_probability:number; convergence_delta:number; disclaimer:string; approximation_warning:boolean;
   tokens:{text:string;start:number;end:number;attribution:number;normalized_attribution:number}[];
+  history_explanation_saved?:boolean;
 };
 
-export function TokenExplanation({text,onSignedOut}:{text:string;onSignedOut:()=>void}) {
+export function TokenExplanation({text,onSignedOut,historyId}:{text:string;onSignedOut:()=>void;historyId?:string}) {
   const [result,setResult] = useState<Explanation|null>(null);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
   async function explain() {
     setBusy(true);setError('');
-    try {setResult(await request<Explanation>('/explain',{method:'POST',body:JSON.stringify({text})}));}
+    try {setResult(await request<Explanation>('/explain',{method:'POST',body:JSON.stringify({text,history_id:historyId})}));}
     catch(e) {
       if(e instanceof ApiError&&e.status===401) onSignedOut();
       else setError(e instanceof Error?e.message:'Unable to explain this prediction.');
@@ -28,6 +29,8 @@ export function TokenExplanation({text,onSignedOut}:{text:string;onSignedOut:()=
     <button className="text-button" onClick={explain} disabled={busy||!!result}>{busy?'Computing explanation...':result?'Explanation generated':'Explain with Captum'}</button>
     {error&&<p className="error" role="alert">{error}</p>}
     {result&&<div aria-live="polite">
+      {result.history_explanation_saved===true&&<p className="muted">Explanation summary saved to history and included in PDF reports. Token text is not stored.</p>}
+      {result.history_explanation_saved===false&&<p className="error">The explanation is available here, but could not be attached to history or the PDF report.</p>}
       {result.approximation_warning&&<p className="analysis-warning">Low explanation reliability: the numerical approximation error is high. Token highlights may be unstable.</p>}
       <p className="muted">Target class: <strong>{result.target_label}</strong>. {result.scope} {result.partial&&'The rest of this document is not highlighted.'}</p>
       <p className="muted">Green: supports this class. Orange: opposes it. Stronger color means greater relative influence; uncolored tokens have little influence.</p>

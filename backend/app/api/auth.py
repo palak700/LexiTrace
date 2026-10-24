@@ -168,7 +168,12 @@ def logout(request: Request, response: Response):
 def analysis_access(request: Request):
     from app.core.config import settings
     if os.getenv('LEXITRACE_ALLOW_ANONYMOUS', str(settings.allow_anonymous)).lower() == 'true':
-        return None
+        try:
+            return current_user(request) if request.cookies.get(COOKIE) else None
+        except HTTPException as exc:
+            if exc.status_code != 401:
+                raise
+            return None
     return current_user(request)
 
 
